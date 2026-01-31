@@ -1,34 +1,40 @@
+use crate::{
+    app::App,
+    colorhelper::{EXT_DEFAULT_CLR, get_ext_color},
+};
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Style},
+    style::{Color, Style, Stylize},
+    text::{Line, Span},
     widgets::{Block, BorderType, List, ListItem, Paragraph},
 };
 
-use crate::app::App;
-
 const LIST_POS: usize = 0;
-const SEARCH_BAR_POS: usize = 1;
-const STATUS_SECTION_POS: usize = 2;
+const PATH_PREVIEW: usize = 1;
+const SEARCH_BAR_POS: usize = 2;
 
 pub fn render(app: &mut App, frame: &mut Frame) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Min(0),    // List
-            Constraint::Length(3), //Search bar
-            Constraint::Length(3), // Status
+            Constraint::Length(3), // Path preview
+            Constraint::Length(3), // Search bar
         ])
         .split(frame.area());
 
     let block = Block::bordered()
-        .title("app-launcher")
+        .title(format!(
+            " Found {} apps in {:.2?} ",
+            app.items_found, app.scan_duration
+        ))
         .title_alignment(Alignment::Center)
         .border_type(BorderType::Rounded);
 
     render_list(app, frame, block, chunks[LIST_POS]);
     render_search_bar(app, frame, chunks[SEARCH_BAR_POS]);
-    render_status_section(app, frame, chunks[STATUS_SECTION_POS]);
+    render_path_preview(app, frame, chunks[PATH_PREVIEW]);
 }
 
 fn render_search_bar(app: &mut App, frame: &mut Frame, area: Rect) {
@@ -45,35 +51,73 @@ fn render_search_bar(app: &mut App, frame: &mut Frame, area: Rect) {
 
 fn render_list(app: &mut App, frame: &mut Frame, block: Block, area: Rect) {
     let items: Vec<ListItem> = app
-        .launchable_apps
+        .filtered_apps
         .iter()
-        .filter(|name| {
-            app.filter_query.is_empty()
-                || name
-                    .to_lowercase()
-                    .contains(&app.filter_query.to_lowercase())
+        .map(|app_entry| {
+            let ext = app_entry
+                .path
+                .extension()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+                .to_lowercase();
+
+            let color = get_ext_color(ext);
+
+            let content = Line::from(vec![Span::styled(
+                app_entry.name.as_str(),
+                Style::default().fg(color),
+            )]);
+
+            ListItem::new(content)
         })
-        .map(|app_name| ListItem::new(app_name.as_str()))
         .collect();
 
     let list = List::new(items)
         .block(block)
-        .highlight_style(Style::default().bg(Color::Blue).fg(Color::White))
+        .highlight_style(Style::default().bg(Color::Blue).fg(Color::White).bold())
         .highlight_symbol(">> ")
         .repeat_highlight_symbol(true);
 
     frame.render_stateful_widget(list, area, &mut app.list_state);
 }
 
-fn render_status_section(app: &mut App, frame: &mut Frame, area: Rect) {
-    let status_text = format!(
-        "Found {} apps in {:.2?}",
-        app.items_found, app.scan_duration
-    );
+fn render_path_preview(app: &mut App, frame: &mut Frame, area: Rect) {
+    let preview_width = area.width.saturating_sub(2) as usize;
 
-    let status = Paragraph::new(status_text)
-        .block(Block::bordered().title("Status"))
-        .alignment(Alignment::Center);
+    let selected_entry = app
+        .list_state
+        .selected()
+        .and_then(|i| app.filtered_apps.get(i));
 
-    frame.render_widget(status, area);
+    let color = if let Some(entry) = selected_entry {
+        let ext = entry
+            .path
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+
+        get_ext_color(ext)
+    } else {
+        EXT_DEFAULT_CLR
+    };
+
+    let selected_path = selected_entry
+        .map(|entry| entry.path.to_string_lossy().to_string())
+        .unwrap_or_else(|| "No selection".to_string());
+
+    let path_len = selected_path.len();
+    let display_path = if path_len > preview_width && preview_width > 3 {
+        let truncate_pos = path_len - (preview_width - 3);
+        format!("...{}", &selected_path[truncate_pos..])
+    } else {
+        selected_path
+    };
+
+    let path_preview = Paragraph::new(display_path)
+        .block(Block::bordered().title(" Selected Path "))
+        .style(Style::default().fg(color))
+        .alignment(Alignment::Left);
+
+    frame.render_widget(path_preview, area);
 }

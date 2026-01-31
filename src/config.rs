@@ -1,10 +1,12 @@
 use serde::Deserialize;
+use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 
 #[derive(Deserialize, Debug)]
 pub struct AppConfig {
     pub watch_paths: Vec<PathBuf>,
+    pub watch_extensions: HashSet<String>,
     pub skip_hidden_files: bool,
 }
 

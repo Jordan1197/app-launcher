@@ -36,8 +36,8 @@ pub enum AppEvent {
     Next,
     Previous,
     AddFilterQuery(char),
-    RemoveFilterQuery,
     ResetFilterQuery,
+    Execute,
     Quit,
 }
 
