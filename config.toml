@@ -1,0 +1,2 @@
+watch_paths = ["", ""]
+skip_hidden_files = true
