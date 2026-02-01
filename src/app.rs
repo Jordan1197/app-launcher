@@ -4,6 +4,7 @@ use crate::{
     config::AppConfig,
     event::{AppEvent, Event, EventHandler},
 };
+use color_eyre::eyre;
 use ignore::WalkBuilder;
 use ratatui::{
     DefaultTerminal,
@@ -32,27 +33,22 @@ pub struct App {
     pub list_state: ListState,
     pub filter_query: String,
 }
+impl App {
+    /// Constructs a new instance of [`App`].
+    pub fn new() -> color_eyre::Result<Self> {
+        let config = AppConfig::load().map_err(|e| eyre::eyre!(e))?;
 
-impl Default for App {
-    fn default() -> Self {
-        Self {
+        Ok(Self {
             running: true,
             events: EventHandler::new(),
             launchable_apps: vec![],
             filtered_apps: vec![],
-            app_config: AppConfig::load().expect("Failed to load config"),
+            app_config: config,
             scan_duration: std::time::Duration::default(),
             items_found: usize::default(),
             list_state: ListState::default(),
             filter_query: String::default(),
-        }
-    }
-}
-
-impl App {
-    /// Constructs a new instance of [`App`].
-    pub fn new() -> Self {
-        Self::default()
+        })
     }
 
     /// Run the application's main loop.

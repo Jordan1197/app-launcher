@@ -11,7 +11,18 @@ pub struct AppConfig {
 }
 
 impl AppConfig {
-    pub fn load() -> Result<Self, Box<dyn std::error::Error>> {
-        Ok(toml::from_str(&fs::read_to_string("config.toml")?)?)
+    pub fn load() -> Result<Self, String> {
+        let filename = "config.toml";
+        let content = fs::read_to_string(filename).map_err(|_| {
+            format!(
+                "Critical Error: '{}' not found. Please create it in the same folder as the .exe.",
+                filename
+            )
+        })?;
+
+        let config = toml::from_str(&content)
+            .map_err(|e| format!("Critical Error: '{}' is invalid. Details: {}", filename, e))?;
+
+        Ok(config)
     }
 }
