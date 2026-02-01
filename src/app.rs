@@ -1,11 +1,9 @@
-use std::sync::{Arc, Mutex};
-
 use crate::{
     config::AppConfig,
     event::{AppEvent, Event, EventHandler},
 };
 use color_eyre::eyre;
-use ignore::WalkBuilder;
+use ignore::{WalkBuilder, types::TypesBuilder};
 use ratatui::{
     DefaultTerminal,
     crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
@@ -200,39 +198,35 @@ impl App {
 
     fn load_launchable_app(&mut self) {
         let stopwatch = std::time::Instant::now();
-        let apps = Arc::new(Mutex::new(Vec::new()));
 
-        let extensions = Arc::new(self.app_config.watch_extensions.clone());
-        let skip_hidden = self.app_config.skip_hidden_files;
+        let mut types_builder = TypesBuilder::new();
+        for ext in &self.app_config.watch_extensions {
+            let _ = types_builder.add(ext, &format!("*.{}", ext));
+        }
+
+        let matcher = types_builder.select("all").build().unwrap();
+        let (tx, rx) = std::sync::mpsc::channel();
 
         for path in &self.app_config.watch_paths {
-            let apps_clone = Arc::clone(&apps);
-            let ext_clone = Arc::clone(&extensions);
+            let tx = tx.clone();
 
             WalkBuilder::new(path)
-                .hidden(skip_hidden)
+                .hidden(self.app_config.skip_hidden_files)
+                .types(matcher.clone())
                 .build_parallel()
                 .run(|| {
-                    let apps_thread = Arc::clone(&apps_clone);
-                    let ext_thread = Arc::clone(&ext_clone);
+                    let tx = tx.clone();
 
                     Box::new(move |result| {
                         if let Ok(entry) = result {
-                            let path = entry.path();
-                            let ext = path.extension().and_then(|e| e.to_str());
+                            if entry.file_type().map_or(false, |ft| ft.is_file()) {
+                                let path = entry.path().to_path_buf();
+                                let name = path
+                                    .file_name()
+                                    .map(|n| n.to_string_lossy().to_string())
+                                    .unwrap_or_default();
 
-                            if let Some(e) = ext {
-                                if ext_thread.contains(e) {
-                                    let name = path
-                                        .file_name()
-                                        .map(|n| n.to_string_lossy().to_string())
-                                        .unwrap_or_else(|| "Unknown".into());
-
-                                    apps_thread.lock().unwrap().push(AppEntry {
-                                        name: name,
-                                        path: path.to_path_buf(),
-                                    });
-                                }
+                                let _ = tx.send(AppEntry { name, path });
                             }
                         }
                         ignore::WalkState::Continue
@@ -240,8 +234,10 @@ impl App {
                 });
         }
 
-        let final_list =
-            self.sort_by_ext_then_name(Arc::try_unwrap(apps).unwrap().into_inner().unwrap());
+        drop(tx);
+
+        let mut final_list: Vec<AppEntry> = rx.into_iter().collect();
+        final_list = self.sort_by_ext_then_name(final_list);
 
         self.scan_duration = stopwatch.elapsed();
         self.launchable_apps = final_list;
