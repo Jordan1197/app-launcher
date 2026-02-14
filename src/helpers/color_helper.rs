@@ -1,7 +1,5 @@
 use ratatui::style::Color;
 
-//TODO: extension from the config
-
 pub const EXT_DEFAULT_CLR: Color = Color::White;
 const EXT_VISUAL_STUDIO_CLR: Color = Color::Rgb(134, 97, 197);
 const EXT_TXT_CLR: Color = Color::LightGreen;

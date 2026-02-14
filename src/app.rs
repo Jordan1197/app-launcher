@@ -1,7 +1,9 @@
 use crate::{
     config::AppConfig,
     event::{AppEvent, Event, EventHandler},
+    helpers::commands_helper,
 };
+use arboard::Clipboard;
 use color_eyre::eyre;
 use ignore::{WalkBuilder, types::TypesBuilder};
 use ratatui::{
@@ -30,6 +32,7 @@ pub struct App {
     pub items_found: usize,
     pub list_state: ListState,
     pub filter_query: String,
+    pub clipboard_status_msg: String,
 }
 impl App {
     /// Constructs a new instance of [`App`].
@@ -46,6 +49,7 @@ impl App {
             items_found: usize::default(),
             list_state: ListState::default(),
             filter_query: String::default(),
+            clipboard_status_msg: String::default(),
         })
     }
 
@@ -79,7 +83,9 @@ impl App {
                 AppEvent::Previous => self.previous(),
                 AppEvent::AddFilterQuery(c) => self.add_filter_query(c),
                 AppEvent::ResetFilterQuery => self.reset_filter_query(),
-                AppEvent::Execute => self.execute_selected(),
+                AppEvent::Execute => self.execute_selected(false),
+                AppEvent::OpenFolder => self.execute_selected(true),
+                AppEvent::CopyPathToClipboard => self.copy_path_to_clipboard(),
                 AppEvent::Quit => self.quit(),
             },
         }
@@ -90,7 +96,10 @@ impl App {
     fn handle_key_event(&mut self, key_event: KeyEvent) -> color_eyre::Result<()> {
         match key_event.code {
             KeyCode::Char('c' | 'C') if key_event.modifiers == KeyModifiers::CONTROL => {
-                self.events.send(AppEvent::Quit)
+                self.events.send(AppEvent::CopyPathToClipboard)
+            }
+            KeyCode::Char('o' | 'O') if key_event.modifiers == KeyModifiers::CONTROL => {
+                self.events.send(AppEvent::OpenFolder)
             }
             KeyCode::Char(c) => self.events.send(AppEvent::AddFilterQuery(c)),
             KeyCode::Backspace => self.events.send(AppEvent::ResetFilterQuery),
@@ -127,6 +136,11 @@ impl App {
         }
     }
 
+    fn get_selected_item(&self) -> Option<&AppEntry> {
+        let index = self.list_state.selected()?;
+        self.filtered_apps.get(index)
+    }
+
     fn next(&mut self) {
         let i = match self.list_state.selected() {
             Some(i) => {
@@ -139,6 +153,7 @@ impl App {
             None => 0,
         };
         self.list_state.select(Some(i));
+        self.empty_clipboard_status_msg();
     }
 
     fn previous(&mut self) {
@@ -153,25 +168,40 @@ impl App {
             None => 0,
         };
         self.list_state.select(Some(i));
+        self.empty_clipboard_status_msg();
     }
 
-    fn execute_selected(&mut self) {
-        if let Some(index) = self.list_state.selected() {
-            if let Some(app_entry) = self.filtered_apps.get(index) {
-                #[cfg(target_os = "windows")]
-                let _ = std::process::Command::new("cmd")
-                    .args(["/C", "start", "", &app_entry.path.to_string_lossy()])
-                    .spawn();
+    fn empty_clipboard_status_msg(&mut self) {
+        self.clipboard_status_msg = String::default()
+    }
 
-                #[cfg(target_os = "macos")]
-                let _ = std::process::Command::new("open")
-                    .arg(&app_entry.path.to_string_lossy())
-                    .spawn();
+    fn execute_selected(&mut self, open_parent: bool) {
+        if let Some(app_entry) = self.get_selected_item() {
+            if open_parent {
+                commands_helper::open_file_explorer(&app_entry.path);
+            } else {
+                commands_helper::open_program(&app_entry.path);
+            }
+        }
+    }
 
-                #[cfg(target_os = "linux")]
-                let _ = std::process::Command::new("xdg-open")
-                    .arg(&app_entry.path.to_string_lossy())
-                    .spawn();
+    fn copy_path_to_clipboard(&mut self) {
+        if let Some(app_entry) = self.get_selected_item() {
+            let path_str = app_entry
+                .path
+                .parent()
+                .map(|p| p.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "".to_string());
+
+            match Clipboard::new() {
+                Ok(mut clipboard) => {
+                    if clipboard.set_text(path_str).is_ok() {
+                        self.clipboard_status_msg = "Path copied to clipboard!".to_string();
+                    }
+                }
+                Err(_) => {
+                    self.clipboard_status_msg = "Failed to access clipboard.".to_string();
+                }
             }
         }
     }
@@ -194,6 +224,8 @@ impl App {
         } else {
             Some(0)
         });
+
+        self.empty_clipboard_status_msg();
     }
 
     fn load_launchable_app(&mut self) {

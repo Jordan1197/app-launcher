@@ -1,6 +1,6 @@
 use crate::{
     app::App,
-    colorhelper::{EXT_DEFAULT_CLR, get_ext_color},
+    helpers::color_helper::{EXT_DEFAULT_CLR, get_ext_color},
 };
 use ratatui::{
     Frame,
@@ -13,6 +13,7 @@ use ratatui::{
 const LIST_POS: usize = 0;
 const PATH_PREVIEW: usize = 1;
 const SEARCH_BAR_POS: usize = 2;
+const STATUS_BAR_POS: usize = 3;
 
 pub fn render(app: &mut App, frame: &mut Frame) {
     let chunks = Layout::default()
@@ -21,6 +22,7 @@ pub fn render(app: &mut App, frame: &mut Frame) {
             Constraint::Min(0),    // List
             Constraint::Length(3), // Path preview
             Constraint::Length(3), // Search bar
+            Constraint::Length(1), // Status bar
         ])
         .split(frame.area());
 
@@ -35,14 +37,15 @@ pub fn render(app: &mut App, frame: &mut Frame) {
     render_list(app, frame, block, chunks[LIST_POS]);
     render_search_bar(app, frame, chunks[SEARCH_BAR_POS]);
     render_path_preview(app, frame, chunks[PATH_PREVIEW]);
+    render_status_bar(frame, chunks[STATUS_BAR_POS]);
 }
 
 fn render_search_bar(app: &mut App, frame: &mut Frame, area: Rect) {
     let search_bar = Paragraph::new(app.filter_query.as_str())
         .block(
             Block::bordered()
-                .title(" Search (Type to filter) ")
-                .border_style(Style::default().fg(Color::Yellow)),
+                .title(" Type to filter ")
+                .border_style(Style::default().fg(Color::White)),
         )
         .alignment(Alignment::Left);
 
@@ -114,10 +117,54 @@ fn render_path_preview(app: &mut App, frame: &mut Frame, area: Rect) {
         selected_path
     };
 
+    let title = match app.clipboard_status_msg.as_str() {
+        "" => " Selected Path ".to_string(),
+        msg => {
+            format!(" Selected Path - {msg}")
+        }
+    };
+
     let path_preview = Paragraph::new(display_path)
-        .block(Block::bordered().title(" Selected Path "))
+        .block(Block::bordered().title(title))
         .style(Style::default().fg(color))
         .alignment(Alignment::Left);
 
     frame.render_widget(path_preview, area);
+}
+
+fn render_status_bar(frame: &mut Frame, area: Rect) {
+    let options = vec![
+        ("Enter", "Open", Color::LightGreen),
+        ("CTRL+C", "Copy Path", Color::White),
+        ("CTRL+O", "Explorer", Color::LightYellow),
+        ("ESC", "Quit", Color::LightRed),
+    ];
+
+    let spans: Vec<Span> = options
+        .into_iter()
+        .flat_map(|(key, desc, color)| {
+            vec![
+                Span::styled(
+                    format!("{}: ", key),
+                    Style::default().bg(Color::default()).fg(color),
+                ),
+                Span::styled(
+                    format!("{}", desc),
+                    Style::default().bg(Color::default()).fg(color),
+                ),
+                Span::styled(
+                    " | ",
+                    Style::default().bg(Color::default()).fg(Color::DarkGray),
+                ),
+            ]
+        })
+        .collect();
+
+    let status_line = Line::from(spans);
+
+    let paragraph = Paragraph::new(status_line)
+        .style(Style::default().bg(Color::default()))
+        .left_aligned();
+
+    frame.render_widget(paragraph, area);
 }
