@@ -135,6 +135,7 @@ fn render_path_preview(app: &mut App, frame: &mut Frame, area: Rect) {
 fn render_status_bar(frame: &mut Frame, area: Rect) {
     let options = vec![
         ("Enter", "Open", Color::LightGreen),
+        ("CTRL+X", "Open->Quit", Color::Green),
         ("CTRL+C", "Copy Path", Color::White),
         ("CTRL+O", "Explorer", Color::LightYellow),
         ("ESC", "Quit", Color::LightRed),

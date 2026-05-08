@@ -38,6 +38,7 @@ pub enum AppEvent {
     AddFilterQuery(char),
     ResetFilterQuery,
     Execute,
+    ExecuteThenClose,
     OpenFolder,
     CopyPathToClipboard,
     Quit,

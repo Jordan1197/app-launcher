@@ -84,6 +84,7 @@ impl App {
                 AppEvent::AddFilterQuery(c) => self.add_filter_query(c),
                 AppEvent::ResetFilterQuery => self.reset_filter_query(),
                 AppEvent::Execute => self.execute_selected(false),
+                AppEvent::ExecuteThenClose => self.execute_then_close(),
                 AppEvent::OpenFolder => self.execute_selected(true),
                 AppEvent::CopyPathToClipboard => self.copy_path_to_clipboard(),
                 AppEvent::Quit => self.quit(),
@@ -101,13 +102,15 @@ impl App {
             KeyCode::Char('o' | 'O') if key_event.modifiers == KeyModifiers::CONTROL => {
                 self.events.send(AppEvent::OpenFolder)
             }
+            KeyCode::Char('x' | 'X') if key_event.modifiers == KeyModifiers::CONTROL => {
+                self.events.send(AppEvent::ExecuteThenClose);
+            }
             KeyCode::Char(c) => self.events.send(AppEvent::AddFilterQuery(c)),
             KeyCode::Backspace => self.events.send(AppEvent::ResetFilterQuery),
             KeyCode::Esc => self.events.send(AppEvent::Quit),
             KeyCode::Down => self.events.send(AppEvent::Next),
             KeyCode::Up => self.events.send(AppEvent::Previous),
             KeyCode::Enter => self.events.send(AppEvent::Execute),
-            // Other handlers you could add here.
             _ => {}
         }
         Ok(())
@@ -183,6 +186,11 @@ impl App {
                 commands_helper::open_program(&app_entry.path);
             }
         }
+    }
+
+    fn execute_then_close(&mut self) {
+        self.execute_selected(false);
+        self.quit();
     }
 
     fn copy_path_to_clipboard(&mut self) {
